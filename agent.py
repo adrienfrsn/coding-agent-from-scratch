@@ -1,0 +1,92 @@
+import json
+from pathlib import Path
+
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
+MODEL = "qwen3.6:35b-a3b"
+
+SYSTEM_PROMPT = (
+    "Tu es un assistant de code."
+    "Utilise les outils à ta disposition pour lire les fichiers avant de répondre."
+)
+
+# description de l'outil au format JSON Schema, c'est tout ce que le modele sait de lui
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Lit le contenu d'un fichier texte et le renvoie.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Chemin relatif du fichier à lire",
+                    }
+                },
+                "required": ["path"],
+            },
+        },
+    }
+]
+
+
+def read_file(path: str) -> str:
+    try:
+        return Path(path).read_text()
+    except Exception as e:
+        # on renvoie l'erreur au modele plutot que de planter, il pourra se corriger
+        return f"Erreur : {e}"
+
+
+def execute_tool(name: str, arguments: dict) -> str:
+    if name == "read_file":
+        return read_file(**arguments)
+    else:
+        return f"Erreur : outil inconnu '{name}'"
+
+
+def run(user_request: str) -> None:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_request},
+    ]
+
+    while True:
+        response = client.chat.completions.create(
+            model=MODEL, messages=messages, tools=TOOLS
+        )
+        message = response.choices[0].message
+
+        # l'historique doit contenir la réponse du modèle, y compris ses appels d'outils
+        # sinon il ne pourra pas relier les résultats à ses demandes
+        messages.append(message)
+
+        if not message.tool_calls:
+            print(message.content)
+            break
+
+        for tool_call in message.tool_calls:
+            name = tool_call.function.name
+            # les arguments arrivent sous forme de texte JSON pas d'objet Python
+            arguments = json.loads(tool_call.function.arguments)
+            print(f"🔧 {name}({arguments})")
+
+            result = execute_tool(name, arguments)
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result,
+                }
+            )
+
+
+if __name__ == "__main__":
+    while True:
+        request = input("\n> ")
+        if request.strip() in ("exit", "quit"):
+            break
+        run(request)

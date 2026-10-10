@@ -29,7 +29,28 @@ TOOLS = [
                 "required": ["path"],
             },
         },
-    }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": "Ecrit du contenu dans un fichier texte.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Chemin relatif du fichier à écrire",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Contenu à écrire dans le fichier",
+                    },
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
 ]
 
 
@@ -41,9 +62,19 @@ def read_file(path: str) -> str:
         return f"Erreur : {e}"
 
 
+def write_file(path, content) -> str:
+    try:
+        Path(path).write_text(content)
+        return "OK"
+    except Exception as e:
+        return f"Erreur : {e}"
+
+
 def execute_tool(name: str, arguments: dict) -> str:
     if name == "read_file":
         return read_file(**arguments)
+    elif name == "write_file":
+        return write_file(**arguments)
     else:
         return f"Erreur : outil inconnu '{name}'"
 

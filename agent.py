@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 
 from openai import OpenAI
 
@@ -51,6 +52,23 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_command",
+            "description": "Exécute une commande shell et renvoie le résultat.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Commande shell à exécuter",
+                    }
+                },
+                "required": ["command"],
+            },
+        },
+    },
 ]
 
 
@@ -69,12 +87,27 @@ def write_file(path, content) -> str:
     except Exception as e:
         return f"Erreur : {e}"
 
+def run_command(command: str) -> str:
+    print(f"\n$ {command}")
+    if input("Exécuter ? [o/N] ").strip().lower() != "o":
+        return "Commande refusée par l'utilisateur"
+    try:
+        result = subprocess.run(
+            command, shell=True, capture_output=True, text=True, timeout=60
+        )
+    except subprocess.TimeoutExpired:
+        return "Erreur : la commande a dépassé 60 secondes"
+    output = f"code de retour : {result.returncode}\n{result.stdout}{result.stderr}"
+    return output[-4000:]
+
 
 def execute_tool(name: str, arguments: dict) -> str:
     if name == "read_file":
         return read_file(**arguments)
     elif name == "write_file":
         return write_file(**arguments)
+    elif name == "run_command":
+        return run_command(**arguments)
     else:
         return f"Erreur : outil inconnu '{name}'"
 

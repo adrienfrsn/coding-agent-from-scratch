@@ -1,16 +1,19 @@
 import json
+import os
 from pathlib import Path
 import subprocess
 
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
-MODEL = "qwen3.6:35b-a3b"
+MODEL = "qwen3.8:27b-mlx"
 
 SYSTEM_PROMPT = (
-    "Tu es un assistant de code."
+    "Tu es un assistant de code. "
     "Utilise les outils à ta disposition pour lire les fichiers avant de répondre."
 )
+
+WORKDIR = Path.cwd().resolve()
 
 # description de l'outil au format JSON Schema, c'est tout ce que le modele sait de lui
 TOOLS = [
@@ -35,7 +38,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Ecrit du contenu dans un fichier texte.",
+            "description": "Ecris du contenu dans un fichier texte.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -69,12 +72,54 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": "Liste les fichiers dans un répertoire.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Chemin relatif du répertoire à lister",
+                    }
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "edit_file",
+            "description": "Remplace une chaîne de caractères dans un fichier texte.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Chemin relatif du fichier à éditer",
+                    },
+                    "old": {
+                        "type": "string",
+                        "description": "Chaîne de caractères à remplacer",
+                    },
+                    "new": {
+                        "type": "string",
+                        "description": "Nouvelle chaîne de caractères",
+                    },
+                },
+                "required": ["path", "old", "new"],
+            },
+        },
+    },
 ]
 
 
 def read_file(path: str) -> str:
     try:
-        return Path(path).read_text()
+        return safe_path(path).read_text()
     except Exception as e:
         # on renvoie l'erreur au modele plutot que de planter, il pourra se corriger
         return f"Erreur : {e}"
@@ -82,7 +127,8 @@ def read_file(path: str) -> str:
 
 def write_file(path, content) -> str:
     try:
-        Path(path).write_text(content)
+        safe_path(path).parent.mkdir(parents=True, exist_ok=True)
+        safe_path(path).write_text(content)
         return "OK"
     except Exception as e:
         return f"Erreur : {e}"
@@ -101,6 +147,28 @@ def run_command(command: str) -> str:
     return output[-4000:]
 
 
+def list_files(path: str) -> str:
+    try:
+        return "\n".join(os.listdir(path))
+    except Exception as e:
+        return f"Erreur : {e}"
+
+    
+def edit_file(path: str, old: str, new: str) -> str:
+    try:
+        content = safe_path(path).read_text()
+        if old not in content:
+            return f"Erreur : la chaîne '{old}' n'a pas été trouvée dans le fichier"
+        elif content.count(old) > 1:
+            return f"Erreur : la chaîne '{old}' apparaît plusieurs fois dans le fichier"
+        else:
+            content = content.replace(old, new)
+            safe_path(path).write_text(content)
+            return "OK"
+    except Exception as e:
+        return f"Erreur : {e}"
+
+
 def execute_tool(name: str, arguments: dict) -> str:
     if name == "read_file":
         return read_file(**arguments)
@@ -108,8 +176,19 @@ def execute_tool(name: str, arguments: dict) -> str:
         return write_file(**arguments)
     elif name == "run_command":
         return run_command(**arguments)
+    elif name == "list_files":
+        return list_files(**arguments)
+    elif name == "edit_file":
+        return edit_file(**arguments)
     else:
         return f"Erreur : outil inconnu '{name}'"
+
+
+def safe_path(path: str) -> Path:
+    resolved = (WORKDIR / path).resolve()
+    if not resolved.is_relative_to(WORKDIR):
+        raise ValueError(f"accès refusé, '{path}' est en dehors du dossier de travail")
+    return resolved
 
 
 def run(user_request: str) -> None:

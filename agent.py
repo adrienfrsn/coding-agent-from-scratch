@@ -2,6 +2,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 
 from openai import OpenAI
 
@@ -9,8 +10,13 @@ client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
 MODEL = "qwen3.8:27b-mlx"
 
 SYSTEM_PROMPT = (
-    "Tu es un assistant de code. "
-    "Utilise les outils à ta disposition pour lire les fichiers avant de répondre."
+    "Tu es un agent de code autonome. "
+    "Méthode : 1) explore le projet avec list_files et read_file, "
+    "2) lance les tests pour voir ce qui échoue, "
+    "3) corrige avec edit_file en lisant toujours le fichier avant, "
+    "4) relance les tests après chaque modification. "
+    "Ne t'arrête que lorsque tous les tests passent, puis résume en deux phrases ce que tu as changé. "
+    "Si l'accès à un fichier est refusé, ne cherche pas à le contourner."
 )
 
 WORKDIR = Path.cwd().resolve()
@@ -116,6 +122,8 @@ TOOLS = [
     },
 ]
 
+MAX_STEPS = 25
+
 
 def read_file(path: str) -> str:
     try:
@@ -196,35 +204,41 @@ def run(user_request: str) -> None:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_request},
     ]
+    historique = []  # pour détecter les répétitions
+    debut = time.time()
 
-    while True:
+    for etape in range(1, MAX_STEPS + 1):
         response = client.chat.completions.create(
             model=MODEL, messages=messages, tools=TOOLS
         )
         message = response.choices[0].message
-
-        # l'historique doit contenir la réponse du modèle, y compris ses appels d'outils
-        # sinon il ne pourra pas relier les résultats à ses demandes
         messages.append(message)
 
         if not message.tool_calls:
             print(message.content)
-            break
+            print(f"\nTerminé en {etape} tours, {time.time() - debut:.0f} s")
+            return
 
         for tool_call in message.tool_calls:
             name = tool_call.function.name
-            # les arguments arrivent sous forme de texte JSON pas d'objet Python
-            arguments = json.loads(tool_call.function.arguments)
-            print(f"🔧 {name}({arguments})")
+            try:
+                arguments = json.loads(tool_call.function.arguments)
+            except json.JSONDecodeError as e:
+                result = f"Erreur : arguments JSON invalides ({e}). Réessaie avec un JSON valide."
+            else:
+                print(f"🔧 {name}({arguments})")
+                appel = (name, json.dumps(arguments, sort_keys=True))
+                if len(historique) >= 3 and all(h == appel for h in historique[-3:]):
+                    result = "Erreur : répétition détectée. Change d'approche."
+                else:
+                    historique.append(appel)
+                    result = execute_tool(name, arguments)
 
-            result = execute_tool(name, arguments)
             messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result,
-                }
+                {"role": "tool", "tool_call_id": tool_call.id, "content": result}
             )
+
+    print(f"\nLimite de {MAX_STEPS} tours atteinte, tâche interrompue.")
 
 
 if __name__ == "__main__":

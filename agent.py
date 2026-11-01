@@ -11,30 +11,30 @@ client = OpenAI(base_url=os.environ.get("OLLAMA_URL", "http://localhost:11434/v1
 MODEL = "qwen2.5:7b"
 
 SYSTEM_PROMPT = (
-    "Tu es un agent de code autonome. "
-    "Méthode : 1) explore le projet avec list_files et read_file, "
-    "2) lance les tests pour voir ce qui échoue, "
-    "3) corrige avec edit_file en lisant toujours le fichier avant, "
-    "4) relance les tests après chaque modification. "
-    "Ne t'arrête que lorsque tous les tests passent, puis résume en deux phrases ce que tu as changé. "
-    "Si l'accès à un fichier est refusé, ne cherche pas à le contourner."
+    "You are an autonomous coding agent. "
+    "Method: 1) explore the project with list_files and read_file, "
+    "2) run the tests to see what fails, "
+    "3) fix with edit_file, always reading the file first, "
+    "4) rerun the tests after every change. "
+    "Only stop once all tests pass, then summarize what you changed in two sentences. "
+    "If access to a file is denied, do not try to work around it."
 )
 
 WORKDIR = Path.cwd().resolve()
 
-# description de l'outil au format JSON Schema, c'est tout ce que le modele sait de lui
+# tool description in JSON Schema format, it is all the model knows about the tool
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Lit le contenu d'un fichier texte et le renvoie.",
+            "description": "Reads the content of a text file and returns it.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Chemin relatif du fichier à lire",
+                        "description": "Relative path of the file to read",
                     }
                 },
                 "required": ["path"],
@@ -45,17 +45,17 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "write_file",
-            "description": "Ecris du contenu dans un fichier texte.",
+            "description": "Writes content to a text file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Chemin relatif du fichier à écrire",
+                        "description": "Relative path of the file to write",
                     },
                     "content": {
                         "type": "string",
-                        "description": "Contenu à écrire dans le fichier",
+                        "description": "Content to write to the file",
                     },
                 },
                 "required": ["path", "content"],
@@ -66,13 +66,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "run_command",
-            "description": "Exécute une commande shell et renvoie le résultat.",
+            "description": "Runs a shell command and returns the result.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Commande shell à exécuter",
+                        "description": "Shell command to run",
                     }
                 },
                 "required": ["command"],
@@ -83,13 +83,13 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_files",
-            "description": "Liste les fichiers dans un répertoire.",
+            "description": "Lists the files in a directory.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Chemin relatif du répertoire à lister",
+                        "description": "Relative path of the directory to list",
                     }
                 },
                 "required": ["path"],
@@ -100,21 +100,21 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "edit_file",
-            "description": "Remplace une chaîne de caractères dans un fichier texte.",
+            "description": "Replaces a string in a text file.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Chemin relatif du fichier à éditer",
+                        "description": "Relative path of the file to edit",
                     },
                     "old": {
                         "type": "string",
-                        "description": "Chaîne de caractères à remplacer",
+                        "description": "String to replace",
                     },
                     "new": {
                         "type": "string",
-                        "description": "Nouvelle chaîne de caractères",
+                        "description": "New string",
                     },
                 },
                 "required": ["path", "old", "new"],
@@ -124,15 +124,15 @@ TOOLS = [
 ]
 
 MAX_STEPS = 25
-AUTO_YES = False  # --yes : saute la confirmation de run_command (conteneur uniquement)
+AUTO_YES = False  # --yes: skips the run_command confirmation (container only)
 
 
 def read_file(path: str) -> str:
     try:
         return safe_path(path).read_text()
     except Exception as e:
-        # on renvoie l'erreur au modele plutot que de planter, il pourra se corriger
-        return f"Erreur : {e}"
+        # return the error to the model instead of crashing, so it can correct itself
+        return f"Error: {e}"
 
 
 def write_file(path, content) -> str:
@@ -141,19 +141,19 @@ def write_file(path, content) -> str:
         safe_path(path).write_text(content)
         return "OK"
     except Exception as e:
-        return f"Erreur : {e}"
+        return f"Error: {e}"
 
 def run_command(command: str) -> str:
     print(f"\n$ {command}")
-    if not AUTO_YES and input("Exécuter ? [o/N] ").strip().lower() != "o":
-        return "Commande refusée par l'utilisateur"
+    if not AUTO_YES and input("Run? [y/N] ").strip().lower() != "y":
+        return "Command rejected by the user"
     try:
         result = subprocess.run(
             command, shell=True, capture_output=True, text=True, timeout=60
         )
     except subprocess.TimeoutExpired:
-        return "Erreur : la commande a dépassé 60 secondes"
-    output = f"code de retour : {result.returncode}\n{result.stdout}{result.stderr}"
+        return "Error: the command took longer than 60 seconds"
+    output = f"return code: {result.returncode}\n{result.stdout}{result.stderr}"
     return output[-4000:]
 
 
@@ -161,22 +161,22 @@ def list_files(path: str) -> str:
     try:
         return "\n".join(os.listdir(path))
     except Exception as e:
-        return f"Erreur : {e}"
+        return f"Error: {e}"
 
     
 def edit_file(path: str, old: str, new: str) -> str:
     try:
         content = safe_path(path).read_text()
         if old not in content:
-            return f"Erreur : la chaîne '{old}' n'a pas été trouvée dans le fichier"
+            return f"Error: the string '{old}' was not found in the file"
         elif content.count(old) > 1:
-            return f"Erreur : la chaîne '{old}' apparaît plusieurs fois dans le fichier"
+            return f"Error: the string '{old}' appears several times in the file"
         else:
             content = content.replace(old, new)
             safe_path(path).write_text(content)
             return "OK"
     except Exception as e:
-        return f"Erreur : {e}"
+        return f"Error: {e}"
 
 
 def execute_tool(name: str, arguments: dict) -> str:
@@ -191,13 +191,13 @@ def execute_tool(name: str, arguments: dict) -> str:
     elif name == "edit_file":
         return edit_file(**arguments)
     else:
-        return f"Erreur : outil inconnu '{name}'"
+        return f"Error: unknown tool '{name}'"
 
 
 def safe_path(path: str) -> Path:
     resolved = (WORKDIR / path).resolve()
     if not resolved.is_relative_to(WORKDIR):
-        raise ValueError(f"accès refusé, '{path}' est en dehors du dossier de travail")
+        raise ValueError(f"access denied, '{path}' is outside the working directory")
     return resolved
 
 
@@ -206,10 +206,10 @@ def run(user_request: str) -> None:
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_request},
     ]
-    historique = []  # pour détecter les répétitions
-    debut = time.time()
+    history = []  # to detect repetitions
+    start = time.time()
 
-    for etape in range(1, MAX_STEPS + 1):
+    for step in range(1, MAX_STEPS + 1):
         response = client.chat.completions.create(
             model=MODEL, messages=messages, tools=TOOLS
         )
@@ -218,7 +218,7 @@ def run(user_request: str) -> None:
 
         if not message.tool_calls:
             print(message.content)
-            print(f"\nTerminé en {etape} tours, {time.time() - debut:.0f} s")
+            print(f"\nDone in {step} turns, {time.time() - start:.0f} s")
             return
 
         for tool_call in message.tool_calls:
@@ -226,30 +226,30 @@ def run(user_request: str) -> None:
             try:
                 arguments = json.loads(tool_call.function.arguments)
             except json.JSONDecodeError as e:
-                result = f"Erreur : arguments JSON invalides ({e}). Réessaie avec un JSON valide."
+                result = f"Error: invalid JSON arguments ({e}). Try again with valid JSON."
             else:
                 print(f"🔧 {name}({arguments})")
-                appel = (name, json.dumps(arguments, sort_keys=True))
-                if len(historique) >= 3 and all(h == appel for h in historique[-3:]):
-                    result = "Erreur : répétition détectée. Change d'approche."
+                call = (name, json.dumps(arguments, sort_keys=True))
+                if len(history) >= 3 and all(h == call for h in history[-3:]):
+                    result = "Error: repetition detected. Change your approach."
                 else:
-                    historique.append(appel)
+                    history.append(call)
                     result = execute_tool(name, arguments)
 
             messages.append(
                 {"role": "tool", "tool_call_id": tool_call.id, "content": result}
             )
 
-    print(f"\nLimite de {MAX_STEPS} tours atteinte, tâche interrompue.")
+    print(f"\nLimit of {MAX_STEPS} turns reached, task aborted.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--task", help="exécute une seule demande puis quitte")
+    parser.add_argument("--task", help="run a single request then exit")
     parser.add_argument(
         "--yes",
         action="store_true",
-        help="exécute les commandes sans confirmation (à réserver à un conteneur)",
+        help="run commands without confirmation (container only)",
     )
     args = parser.parse_args()
     AUTO_YES = args.yes

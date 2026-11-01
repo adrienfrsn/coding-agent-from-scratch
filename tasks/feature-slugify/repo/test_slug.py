@@ -5,13 +5,13 @@ def test_simple():
     assert slugify("Hello World") == "hello-world"
 
 
-def test_ponctuation():
-    assert slugify("Salut, le monde !") == "salut-le-monde"
+def test_punctuation():
+    assert slugify("Hi, big world !") == "hi-big-world"
 
 
-def test_espaces_multiples():
+def test_multiple_spaces():
     assert slugify("  a   b  ") == "a-b"
 
 
-def test_vide():
+def test_empty():
     assert slugify("") == ""

@@ -1,19 +1,19 @@
-from pagination import nombre_pages, page
+from pagination import page_count, page
 
-DONNEES = list(range(1, 11))
-
-
-def test_premiere_page():
-    assert page(DONNEES, 1, 4) == [1, 2, 3, 4]
+DATA = list(range(1, 11))
 
 
-def test_derniere_page_partielle():
-    assert page(DONNEES, 3, 4) == [9, 10]
+def test_first_page():
+    assert page(DATA, 1, 4) == [1, 2, 3, 4]
 
 
-def test_nombre_pages_exact():
-    assert nombre_pages(DONNEES, 5) == 2
+def test_last_partial_page():
+    assert page(DATA, 3, 4) == [9, 10]
 
 
-def test_nombre_pages_partiel():
-    assert nombre_pages(DONNEES, 4) == 3
+def test_page_count_exact():
+    assert page_count(DATA, 5) == 2
+
+
+def test_page_count_partial():
+    assert page_count(DATA, 4) == 3

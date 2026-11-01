@@ -1,7 +1,5 @@
 {
-  "prompt": "Refactore formes.py : la vérification des dimensions négatives est dupliquée, factorise-la dans une fonction _verifier(*dimensions). Les tests doivent continuer à passer.",
-  "check": "python -m pytest -q && grep -q 'def _verifier' formes.py && [ $(grep -c 'dimension négative' formes.py) -eq 1 ]",
-  "protected": [
-    "test_formes.py"
-  ]
+  "prompt": "Refactor shapes.py: the negative dimension check is duplicated, extract it into a function _check(*dimensions). The tests must keep passing.",
+  "check": "python -m pytest -q && grep -q 'def _check' shapes.py && [ $(grep -c 'negative dimension' shapes.py) -eq 1 ]",
+  "protected": ["test_shapes.py"]
 }

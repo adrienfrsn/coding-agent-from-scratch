@@ -1,7 +1,5 @@
 {
-  "prompt": "Les tests de test_slug.py attendent une fonction slugify dans slug.py. Implémente-la.",
+  "prompt": "The tests in test_slug.py expect a slugify function in slug.py. Implement it.",
   "check": "python -m pytest -q",
-  "protected": [
-    "test_slug.py"
-  ]
+  "protected": ["test_slug.py"]
 }

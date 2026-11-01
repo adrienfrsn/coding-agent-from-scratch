@@ -1,8 +1,8 @@
-def page(elements, numero, taille):
-    """Renvoie la page `numero` (la première page est la 1)."""
-    debut = numero * taille
-    return elements[debut:debut + taille]
+def page(items, number, size):
+    """Return page `number` (the first page is 1)."""
+    start = number * size
+    return items[start:start + size]
 
 
-def nombre_pages(elements, taille):
-    return len(elements) // taille
+def page_count(items, size):
+    return len(items) // size

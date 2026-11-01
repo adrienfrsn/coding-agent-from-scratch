@@ -1,2 +1,2 @@
-def majuscule(chaine):
-    return chaine.upper()
+def uppercase(string):
+    return string.upper()

@@ -1,92 +1,92 @@
-# Agent de code local
+# Local coding agent
 
-Un agent de code construit from scratch en Python, conçu pour tourner **entièrement en local** avec un modèle open source via [Ollama](https://ollama.com). Aucune ligne de code ne quitte la machine.
+A coding agent built from scratch in Python, designed to run **entirely locally** with an open-source model via [Ollama](https://ollama.com). Not a single line of code leaves your machine.
 
-Ce projet est avant tout un projet d'apprentissage pour comprendre de l'intérieur comment fonctionnent les agents de code comme Claude Code ou OpenCode, en les reconstruisant étape par étape.
+This is first and foremost a learning project, to understand from the inside how coding agents like Claude Code or OpenCode work, by rebuilding them step by step.
 
-## Pourquoi un agent local ?
+## Why a local agent?
 
-La plupart des agents de code sont pensés pour de gros modèles cloud. Un modèle local impose des contraintes différentes, qui en font un problème d'ingénierie intéressant :
+Most coding agents are designed for large cloud models. A local model imposes different constraints, which make it an interesting engineering problem:
 
-- **un contexte plus petit**, où chaque token compte
-- **des appels d'outils moins fiables**, qu'il faut rendre robustes
-- **un raisonnement plus limité**, qui demande des outils simples et bien décrits
-- **une vitesse plus faible**, où chaque tour de boucle inutile se ressent
+- **a smaller context**, where every token counts
+- **less reliable tool calls**, which must be made robust
+- **more limited reasoning**, which calls for simple, well-described tools
+- **lower speed**, where every unnecessary loop iteration is felt
 
-En contrepartie la confidentialité est totale et le coût d'utilisation est nul.
+In return, privacy is total and the cost of use is zero.
 
-## Fonctionnement
+## How it works
 
-Le cœur de l'agent est une boucle :
+The core of the agent is a loop:
 
 ```
-messages = [prompt système, demande de l'utilisateur]
-tant que vrai :
-    réponse = llm(messages, outils disponibles)
-    si la réponse ne contient aucun appel d'outil : afficher et arrêter
-    pour chaque appel d'outil :
-        résultat = exécuter(outil, arguments)
-        ajouter le résultat aux messages
+messages = [system prompt, user request]
+while true:
+    response = llm(messages, available tools)
+    if the response contains no tool call: print it and stop
+    for each tool call:
+        result = execute(tool, arguments)
+        append the result to messages
 ```
 
-Le modèle ne fait que **choisir** quel outil appeler, à partir de leur nom et de leur description. C'est le code de l'agent qui **exécute**, et c'est donc là que se jouent la fiabilité et la sécurité.
+The model only **chooses** which tool to call, based on their name and description. It is the agent's code that **executes**, and that is therefore where reliability and security are decided.
 
-## Outils disponibles
+## Available tools
 
-| Outil | Rôle |
+| Tool | Purpose |
 |---|---|
-| `read_file` | Lire le contenu d'un fichier |
-| `write_file` | Créer ou réécrire un fichier |
-| `edit_file` | Remplacer une chaîne exacte et unique dans un fichier |
-| `list_files` | Lister le contenu d'un dossier |
-| `run_command` | Exécuter une commande shell, après confirmation |
+| `read_file` | Read the content of a file |
+| `write_file` | Create or rewrite a file |
+| `edit_file` | Replace an exact, unique string in a file |
+| `list_files` | List the content of a directory |
+| `run_command` | Run a shell command, after confirmation |
 
-`edit_file` remplace une chaîne précise plutôt que de réécrire le fichier entier : c'est plus rapide, beaucoup moins coûteux en contexte, et évite que le modèle modifie par erreur le reste du fichier. La modification est refusée si la chaîne est introuvable ou présente plusieurs fois, pour ne jamais éditer le mauvais endroit.
+`edit_file` replaces a specific string rather than rewriting the whole file: it is faster, much cheaper in context, and prevents the model from accidentally changing the rest of the file. The edit is rejected if the string is not found or appears several times, so the wrong place is never edited.
 
-## Sécurité
+## Security
 
-La sécurité est construite en plusieurs couches, chacune couvrant ce que les autres ne couvrent pas :
+Security is built in several layers, each covering what the others do not:
 
-- **Confirmation des commandes** : chaque commande shell est affichée et doit être validée explicitement. Le refus est le comportement par défaut.
-- **Timeout** : une commande qui dépasse 60 secondes est interrompue.
-- **Sorties tronquées** : seule la fin de la sortie d'une commande est renvoyée au modèle, pour ne pas saturer son contexte.
-- **Erreurs renvoyées au modèle** : un outil qui échoue ne fait pas planter l'agent, il renvoie l'erreur pour que le modèle puisse se corriger.
+- **Command confirmation**: every shell command is displayed and must be explicitly approved. Refusal is the default behavior.
+- **Timeout**: a command that runs longer than 60 seconds is interrupted.
+- **Truncated output**: only the end of a command's output is returned to the model, so as not to saturate its context.
+- **Errors returned to the model**: a tool that fails does not crash the agent, it returns the error so the model can correct itself.
 
-### Un exemple concret
+### A concrete example
 
-Demander à l'agent de lire `~/.zshrc` donne ceci :
+Asking the agent to read `~/.zshrc` gives this:
 
 ```
-> lis le contenu du fichier ~/.zshrc
+> read the content of the file ~/.zshrc
 🔧 read_file({'path': '~/.zshrc'})
 🔧 run_command({'command': 'cat ~/.zshrc'})
 
 $ cat ~/.zshrc
-Exécuter ? [o/N]
+Run? [y/N]
 ```
 
-Bloqué par `read_file`, le modèle a immédiatement tenté de contourner l'obstacle avec une commande shell. Il n'est pas malveillant, il cherche simplement à accomplir la demande. C'est la confirmation qui l'a arrêté.
+Blocked by `read_file`, the model immediately tried to work around the obstacle with a shell command. It is not malicious, it is simply trying to fulfill the request. It was the confirmation that stopped it.
 
-Ce test illustre pourquoi une protection dans un seul outil ne suffit jamais, et pourquoi une consigne dans le prompt n'est pas une protection. La sécurité d'un agent doit être garantie par le code.
+This test illustrates why protection in a single tool is never enough, and why an instruction in the prompt is not a protection. An agent's security must be guaranteed by the code.
 
 ## Installation
 
-Prérequis : Python 3.12, Ollama, et une machine capable de faire tourner le modèle choisi (environ 20 Go de mémoire pour un modèle de 27B). Le projet est développé et testé sur un MacBook Pro M2 Max 64 Go. Sur Linux ou Windows, utiliser une variante GGUF du modèle plutôt que la variante MLX.
+Prerequisites: Python 3.12, Ollama, and a machine able to run the chosen model (about 20 GB of memory for a 27B model). The project is developed and tested on a MacBook Pro M2 Max 64 GB. On Linux or Windows, use a GGUF variant of the model rather than the MLX variant.
 
-Télécharger un modèle (ici Qwen mais n'importe quel modèle compatible avec l'appel d'outils fonctionne) :
+Download a model (Qwen here, but any model that supports tool calling works):
 
 ```bash
 ollama pull qwen3.8:27b-mlx
 ```
 
-Créer un fichier `Modelfile` pour augmenter la fenêtre de contexte :
+Create a `Modelfile` to increase the context window:
 
 ```
 FROM qwen3.8:27b-mlx
 PARAMETER num_ctx 32768
 ```
 
-Puis créer la variante du modèle et l'environnement Python :
+Then create the model variant and the Python environment:
 
 ```bash
 ollama create qwen-coder -f Modelfile
@@ -95,28 +95,28 @@ source .venv/bin/activate
 pip install openai
 ```
 
-La fenêtre de contexte est essentielle : avec la valeur par défaut d'Ollama, les définitions d'outils et quelques lectures de fichiers suffisent à la dépasser, et le début de la conversation est tronqué silencieusement.
+The context window is essential: with Ollama's default value, the tool definitions and a few file reads are enough to exceed it, and the beginning of the conversation is silently truncated.
 
-## Utilisation
+## Usage
 
 ```bash
 python agent.py
 ```
 
 ```
-> crée un hello world en Java, compile-le et lance-le
+> create a Java hello world, compile it and run it
 ```
 
-L'agent utilise l'API compatible OpenAI d'Ollama, il fonctionne aussi avec LM Studio ou tout autre serveur compatible, en changeant simplement l'URL et le nom du modèle.
+The agent uses Ollama's OpenAI-compatible API, so it also works with LM Studio or any other compatible server, by simply changing the URL and the model name.
 
 
-## Évaluation
+## Evaluation
 
-`eval.py` mesure la fiabilité de l'agent. Chaque dossier de `tasks/` contient un `repo/` (le projet de départ) et un `task.json` (`prompt`, `check`, `protected`). Pour chaque tâche, le runner copie le projet dans un dossier temporaire, lance `agent.py --task "..." --yes` (3 essais, l'agent n'étant pas déterministe), restaure les fichiers `protected` (les tests d'origine) puis exécute lui-même la commande `check`. Il ne croit jamais l'agent quand celui-ci dit avoir réussi.
+`eval.py` measures the agent's reliability. Each folder in `tasks/` contains a `repo/` (the starting project) and a `task.json` (`prompt`, `check`, `protected`). For each task, the runner copies the project into a temporary folder, runs `agent.py --task "..." --yes` (3 attempts, since the agent is not deterministic), restores the `protected` files (the original tests), then runs the `check` command itself. It never trusts the agent when it claims to have succeeded.
 
-Les 13 tâches couvrent : bugs simples (borne, liste vide, `None`, opérateur, pagination), bug sur deux fichiers, fonctionnalités à ajouter, refactoring, Java, et un fichier de 300 lignes.
+The 13 tasks cover: simple bugs (bounds, empty list, `None`, operator, pagination), a bug spanning two files, features to add, refactoring, Java, and a 300-line file.
 
-`--yes` supprime la confirmation de `run_command` : à n'utiliser que dans un conteneur.
+`--yes` removes the `run_command` confirmation: only use it in a container.
 
 ```bash
 docker run --rm -it -v "$PWD":/app -w /app \
@@ -125,8 +125,8 @@ pip install openai pytest
 python eval.py
 ```
 
-Les tâches Java demandent `javac` dans le conteneur (`apt-get install -y default-jdk-headless`).
+The Java tasks require `javac` in the container (`apt-get install -y default-jdk-headless`).
 
-Score de référence : 
-- Qwen 3.8 27b : 90%
-- Qwen 2.5 7b : 15%
+Reference score:
+- Qwen 3.8 27b: 90%
+- Qwen 2.5 7b: 15%

@@ -1,0 +1,5 @@
+{
+  "prompt": "Somme.java doit afficher 10 mais ce n'est pas le cas. Corrige-le, compile avec javac et vérifie avec java.",
+  "check": "javac Somme.java && [ \"$(java Somme)\" = \"10\" ]",
+  "protected": []
+}

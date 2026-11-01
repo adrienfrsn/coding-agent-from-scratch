@@ -1,0 +1,7 @@
+{
+  "prompt": "Complète la classe Pile pour que les tests de test_pile.py passent.",
+  "check": "python -m pytest -q",
+  "protected": [
+    "test_pile.py"
+  ]
+}

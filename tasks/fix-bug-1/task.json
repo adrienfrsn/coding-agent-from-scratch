@@ -1,0 +1,5 @@
+{
+  "prompt": "fais passer les tests",
+  "check": "python -m pytest -q",
+  "protected": ["test_stats.py"]
+}

@@ -108,3 +108,25 @@ python agent.py
 ```
 
 L'agent utilise l'API compatible OpenAI d'Ollama, il fonctionne aussi avec LM Studio ou tout autre serveur compatible, en changeant simplement l'URL et le nom du modèle.
+
+
+## Évaluation
+
+`eval.py` mesure la fiabilité de l'agent. Chaque dossier de `tasks/` contient un `repo/` (le projet de départ) et un `task.json` (`prompt`, `check`, `protected`). Pour chaque tâche, le runner copie le projet dans un dossier temporaire, lance `agent.py --task "..." --yes` (3 essais, l'agent n'étant pas déterministe), restaure les fichiers `protected` (les tests d'origine) puis exécute lui-même la commande `check`. Il ne croit jamais l'agent quand celui-ci dit avoir réussi.
+
+Les 13 tâches couvrent : bugs simples (borne, liste vide, `None`, opérateur, pagination), bug sur deux fichiers, fonctionnalités à ajouter, refactoring, Java, et un fichier de 300 lignes.
+
+`--yes` supprime la confirmation de `run_command` : à n'utiliser que dans un conteneur.
+
+```bash
+docker run --rm -it -v "$PWD":/app -w /app \
+  -e OLLAMA_URL=http://host.docker.internal:11434/v1 python:3.12 bash
+pip install openai pytest
+python eval.py
+```
+
+Les tâches Java demandent `javac` dans le conteneur (`apt-get install -y default-jdk-headless`).
+
+Score de référence : 
+- Qwen 3.8 27b : 90%
+- Qwen 2.5 7b : 15%

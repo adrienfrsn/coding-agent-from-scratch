@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 from pathlib import Path
@@ -6,8 +7,8 @@ import time
 
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:11434/v1", api_key="ollama")
-MODEL = "qwen3.8:27b-mlx"
+client = OpenAI(base_url=os.environ.get("OLLAMA_URL", "http://localhost:11434/v1"), api_key="ollama")
+MODEL = "qwen2.5:7b"
 
 SYSTEM_PROMPT = (
     "Tu es un agent de code autonome. "
@@ -123,6 +124,7 @@ TOOLS = [
 ]
 
 MAX_STEPS = 25
+AUTO_YES = False  # --yes : saute la confirmation de run_command (conteneur uniquement)
 
 
 def read_file(path: str) -> str:
@@ -143,7 +145,7 @@ def write_file(path, content) -> str:
 
 def run_command(command: str) -> str:
     print(f"\n$ {command}")
-    if input("Exécuter ? [o/N] ").strip().lower() != "o":
+    if not AUTO_YES and input("Exécuter ? [o/N] ").strip().lower() != "o":
         return "Commande refusée par l'utilisateur"
     try:
         result = subprocess.run(
@@ -242,8 +244,21 @@ def run(user_request: str) -> None:
 
 
 if __name__ == "__main__":
-    while True:
-        request = input("\n> ")
-        if request.strip() in ("exit", "quit"):
-            break
-        run(request)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--task", help="exécute une seule demande puis quitte")
+    parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="exécute les commandes sans confirmation (à réserver à un conteneur)",
+    )
+    args = parser.parse_args()
+    AUTO_YES = args.yes
+
+    if args.task:
+        run(args.task)
+    else:
+        while True:
+            request = input("\n> ")
+            if request.strip() in ("exit", "quit"):
+                break
+            run(request)

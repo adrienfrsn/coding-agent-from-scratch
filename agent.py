@@ -22,20 +22,36 @@ SYSTEM_PROMPT = (
 
 WORKDIR = Path.cwd().resolve()
 
+CONTEXT_LIMIT = int(os.environ.get("CONTEXT_LIMIT", 32768))
+COMPACT_THRESHOLD = 0.75
+MAX_FILE_LINES = 300
+MAX_OUTPUT_LINES = 200
+
+COMPACT_PROMPT = (
+    "The context is almost full. Summarize the work done so far so you can continue "
+    "from this summary alone: the goal, the files explored and what they contain, "
+    "the changes made, the last test results, and what remains to do. "
+    "Be concise and factual, keep exact file names and error messages."
+)
+
 # tool description in JSON Schema format, it is all the model knows about the tool
 TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "read_file",
-            "description": "Reads the content of a text file and returns it.",
+            "description": f"Reads a text file and returns it, at most {MAX_FILE_LINES} lines at a time.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
                         "description": "Relative path of the file to read",
-                    }
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line to start from (1 = first line). Use it to read the rest of a truncated file.",
+                    },
                 },
                 "required": ["path"],
             },
@@ -127,9 +143,19 @@ MAX_STEPS = 25
 AUTO_YES = False  # --yes: skips the run_command confirmation (container only)
 
 
-def read_file(path: str) -> str:
+def read_file(path: str, offset: int = 1) -> str:
     try:
-        return safe_path(path).read_text()
+        lines = safe_path(path).read_text().splitlines()
+        start = max(offset, 1) - 1
+        chunk = lines[start : start + MAX_FILE_LINES]
+        content = "\n".join(chunk)
+        if start > 0 or start + len(chunk) < len(lines):
+            end = start + len(chunk)
+            content += (
+                f"\n[truncated, lines {start + 1}-{end} out of {len(lines)}"
+                + (f", call read_file with offset={end + 1} to read the rest]" if end < len(lines) else "]")
+            )
+        return content
     except Exception as e:
         # return the error to the model instead of crashing, so it can correct itself
         return f"Error: {e}"
@@ -153,13 +179,25 @@ def run_command(command: str) -> str:
         )
     except subprocess.TimeoutExpired:
         return "Error: the command took longer than 60 seconds"
-    output = f"return code: {result.returncode}\n{result.stdout}{result.stderr}"
-    return output[-4000:]
+    output = f"{result.stdout}{result.stderr}"
+    return f"return code: {result.returncode}\n{truncate_tail(output)}"
+
+
+def truncate_tail(text: str) -> str:
+    """Keeps the end of a long output, where errors and test summaries are."""
+    lines = text.splitlines()
+    if len(lines) > MAX_OUTPUT_LINES:
+        kept = lines[-MAX_OUTPUT_LINES:]
+        text = f"[truncated, last {MAX_OUTPUT_LINES} lines out of {len(lines)}]\n" + "\n".join(kept)
+    # safety net for a few huge lines (minified files, binary output...)
+    if len(text) > 8000:
+        text = "[truncated, last 8000 characters]\n" + text[-8000:]
+    return text
 
 
 def list_files(path: str) -> str:
     try:
-        return "\n".join(os.listdir(path))
+        return truncate_tail("\n".join(sorted(os.listdir(safe_path(path)))))
     except Exception as e:
         return f"Error: {e}"
 
@@ -201,6 +239,24 @@ def safe_path(path: str) -> Path:
     return resolved
 
 
+def compact(messages: list, user_request: str) -> list:
+    print("\n🗜️  Compacting the context...")
+    response = client.chat.completions.create(
+        model=MODEL, messages=messages + [{"role": "user", "content": COMPACT_PROMPT}]
+    )
+    summary = response.choices[0].message.content
+    print(f"📝 Summary:\n{summary}\n")
+    return [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_request},
+        {
+            "role": "user",
+            "content": "Summary of the work done so far (the earlier conversation was "
+            f"compacted):\n{summary}\n\nContinue the task from here.",
+        },
+    ]
+
+
 def run(user_request: str) -> None:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -215,6 +271,9 @@ def run(user_request: str) -> None:
         )
         message = response.choices[0].message
         messages.append(message)
+
+        used = response.usage.total_tokens if response.usage else 0
+        print(f"📏 [{step}] context: {used} / {CONTEXT_LIMIT} tokens ({used / CONTEXT_LIMIT:.0%})")
 
         if not message.tool_calls:
             print(message.content)
@@ -239,6 +298,10 @@ def run(user_request: str) -> None:
             messages.append(
                 {"role": "tool", "tool_call_id": tool_call.id, "content": result}
             )
+            used += len(result) // 4  # estimate (~4 characters per token)
+
+        if used > COMPACT_THRESHOLD * CONTEXT_LIMIT:
+            messages = compact(messages, user_request)
 
     print(f"\nLimit of {MAX_STEPS} turns reached, task aborted.")
 

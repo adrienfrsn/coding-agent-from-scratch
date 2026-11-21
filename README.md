@@ -43,13 +43,23 @@ The model only **chooses** which tool to call, based on their name and descripti
 
 `edit_file` replaces a specific string rather than rewriting the whole file: it is faster, much cheaper in context, and prevents the model from accidentally changing the rest of the file. The edit is rejected if the string is not found or appears several times, so the wrong place is never edited.
 
+## Context management
+
+With a local model the context window is small, and a single large file or a verbose test run can fill it. The agent handles this in three steps:
+
+- **Measure**: every turn prints the context size, taken from the `usage` field of the response: `📏 [3] context: 5120 / 32768 tokens (16%)`.
+- **Limit**: `read_file` returns at most 300 lines, and `run_command` / `list_files` keep the last 200 lines, where errors and test summaries are. The truncation is always explicit (`[truncated, lines 1-300 out of 1200, call read_file with offset=301 to read the rest]`), so the model knows that something is missing and how to get it.
+- **Compact**: when the context goes over 75% of the limit, the agent asks the model to summarize the work done so far (goal, files, changes, test results, what remains), then restarts from the system prompt, the original request and that summary.
+
+The limit is set by `CONTEXT_LIMIT` (default `32768`) and must match the model's `num_ctx`.
+
 ## Security
 
 Security is built in several layers, each covering what the others do not:
 
 - **Command confirmation**: every shell command is displayed and must be explicitly approved. Refusal is the default behavior.
 - **Timeout**: a command that runs longer than 60 seconds is interrupted.
-- **Truncated output**: only the end of a command's output is returned to the model, so as not to saturate its context.
+- **Truncated output**: only the end of a command's output is returned to the model, so as not to saturate its context (see below).
 - **Errors returned to the model**: a tool that fails does not crash the agent, it returns the error so the model can correct itself.
 
 ### A concrete example

@@ -1,0 +1,7 @@
+{
+  "prompt": "Customers are billed wrong amounts for partial months (see test_billing.py). Find the root cause and fix it where it is: the other modules that depend on the same code must be correct too.",
+  "check": "python -m pytest -q",
+  "protected": [
+    "test_billing.py"
+  ]
+}

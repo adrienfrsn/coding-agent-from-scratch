@@ -24,6 +24,9 @@ def run_task(task_dir: Path) -> tuple[bool, float]:
 
         for f in config.get("protected", []):
             shutil.copy(task_dir / "repo" / f, work / f)
+        hidden = task_dir / "hidden"  # tests the agent never sees, copied after its run
+        if hidden.is_dir():
+            shutil.copytree(hidden, work, dirs_exist_ok=True)
         verdict = subprocess.run(config["check"], shell=True, cwd=work, capture_output=True)
         return verdict.returncode == 0, duration
 

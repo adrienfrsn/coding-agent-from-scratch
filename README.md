@@ -47,11 +47,15 @@ The model only **chooses** which tool to call, based on their name and descripti
 
 With a local model the context window is small, and a single large file or a verbose test run can fill it. The agent handles this in three steps:
 
-- **Measure**: every turn prints the context size, taken from the `usage` field of the response: `📏 [3] context: 5120 / 32768 tokens (16%)`.
+- **Measure**: every turn prints the context size, taken from the `usage` field of the response: `[step 3] context: 5120 / 32768 tokens (16%)`.
 - **Limit**: `read_file` returns at most 300 lines, and `run_command` / `list_files` keep the last 200 lines, where errors and test summaries are. The truncation is always explicit (`[truncated, lines 1-300 out of 1200, call read_file with offset=301 to read the rest]`), so the model knows that something is missing and how to get it.
 - **Compact**: when the context goes over 75% of the limit, the agent asks the model to summarize the work done so far (goal, files, changes, test results, what remains), then restarts from the system prompt, the original request and that summary.
 
 The limit is set by `CONTEXT_LIMIT` (default `32768`) and must match the model's `num_ctx`.
+
+## Project instructions (AGENTS.md)
+
+If an `AGENTS.md` file exists in the working directory, its content is appended to the system prompt (it is re-read on each request and kept after compaction). Use it to describe the project: layout, how to run the tests, conventions. Set `AGENTS_MD=0` to ignore it, e.g. to compare success rates with and without it in `eval.py`.
 
 ## Security
 
@@ -122,9 +126,20 @@ The agent uses Ollama's OpenAI-compatible API, so it also works with LM Studio o
 
 ## Evaluation
 
-`eval.py` measures the agent's reliability. Each folder in `tasks/` contains a `repo/` (the starting project) and a `task.json` (`prompt`, `check`, `protected`). For each task, the runner copies the project into a temporary folder, runs `agent.py --task "..." --yes` (3 attempts, since the agent is not deterministic), restores the `protected` files (the original tests), then runs the `check` command itself. It never trusts the agent when it claims to have succeeded.
+`eval.py` measures the agent's reliability. Each folder in `tasks/` contains a `repo/` (the starting project) and a `task.json` (`prompt`, `check`, `protected`), and optionally a `hidden/` folder of tests the agent never sees. For each task, the runner copies the project into a temporary folder, runs `agent.py --task "..." --yes` (3 attempts, since the agent is not deterministic), restores the `protected` files (the original tests), copies the `hidden/` tests into the project, then runs the `check` command itself. It never trusts the agent when it claims to have succeeded.
 
-The 13 tasks cover: simple bugs (bounds, empty list, `None`, operator, pagination), a bug spanning two files, features to add, refactoring, Java, and a 300-line file.
+The 19 tasks are in two groups:
+
+- **Basic** (13): simple bugs (bounds, empty list, `None`, operator, pagination), a bug spanning two files, features to add, refactoring, Java, and a 300-line file.
+- **Advanced** (6), closer to real work:
+  - `multi-bug-package`: three independent bugs in a package with a separate `tests/` folder
+  - `root-cause`: the failing test points at `billing.py`, but the bug is in a shared helper; hidden tests reject a fix of the symptom only
+  - `feature-from-spec`: write an arithmetic expression parser from `SPEC.md`; the visible tests are a sample, hidden tests cover the whole spec
+  - `rename-api`: rename a function across four files, including a module-qualified call and an aliased import
+  - `lru-cache`: two subtle eviction bugs plus a missing `stats()` method
+  - `java-multi-file`: two bugs across two Java classes, checked by an executable `Main`
+
+Four advanced tasks ship an `AGENTS.md` describing the project (layout, how to run the tests, never the fix). Run `AGENTS_MD=0 python eval.py` to measure the agent without it.
 
 `--yes` removes the `run_command` confirmation: only use it in a container.
 

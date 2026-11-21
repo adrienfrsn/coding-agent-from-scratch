@@ -1,0 +1,7 @@
+{
+  "prompt": "Rename the function fetch_usr to get_user everywhere in the codebase (definition and every call site). The tests must pass.",
+  "check": "python -m pytest -q && ! grep -rn fetch_usr --include='*.py' .",
+  "protected": [
+    "tests/test_app.py"
+  ]
+}

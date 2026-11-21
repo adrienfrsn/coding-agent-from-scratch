@@ -1,0 +1,7 @@
+{
+  "prompt": "make the tests pass",
+  "check": "python -m pytest -q",
+  "protected": [
+    "test_cache.py"
+  ]
+}

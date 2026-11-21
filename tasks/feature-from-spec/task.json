@@ -1,0 +1,8 @@
+{
+  "prompt": "Implement evaluate in calc.py following SPEC.md. The tests in test_calc.py are only a sample: the implementation must follow the whole spec.",
+  "check": "python -m pytest -q && ! grep -E '(^|[^a-zA-Z_])(eval|exec)\\(' calc.py",
+  "protected": [
+    "test_calc.py",
+    "SPEC.md"
+  ]
+}

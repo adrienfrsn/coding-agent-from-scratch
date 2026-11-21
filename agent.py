@@ -22,6 +22,18 @@ SYSTEM_PROMPT = (
 
 WORKDIR = Path.cwd().resolve()
 
+
+def load_system_prompt() -> str:
+    agents_md = WORKDIR / "AGENTS.md"
+    if os.environ.get("AGENTS_MD", "1") == "0" or not agents_md.is_file():
+        return SYSTEM_PROMPT
+    print("[agents.md] AGENTS.md loaded into the system prompt")
+    return (
+        f"{SYSTEM_PROMPT}\n\n"
+        "Project instructions (from AGENTS.md):\n"
+        f"{agents_md.read_text()}"
+    )
+
 CONTEXT_LIMIT = int(os.environ.get("CONTEXT_LIMIT", 32768))
 COMPACT_THRESHOLD = 0.75
 MAX_FILE_LINES = 300
@@ -239,15 +251,15 @@ def safe_path(path: str) -> Path:
     return resolved
 
 
-def compact(messages: list, user_request: str) -> list:
-    print("\n🗜️  Compacting the context...")
+def compact(messages: list, user_request: str, system_prompt: str) -> list:
+    print("\n[compact] Compacting the context...")
     response = client.chat.completions.create(
         model=MODEL, messages=messages + [{"role": "user", "content": COMPACT_PROMPT}]
     )
     summary = response.choices[0].message.content
-    print(f"📝 Summary:\n{summary}\n")
+    print(f"[compact] Summary:\n{summary}\n")
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_request},
         {
             "role": "user",
@@ -258,8 +270,9 @@ def compact(messages: list, user_request: str) -> list:
 
 
 def run(user_request: str) -> None:
+    system_prompt = load_system_prompt()  # re-read on each request
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_request},
     ]
     history = []  # to detect repetitions
@@ -273,7 +286,7 @@ def run(user_request: str) -> None:
         messages.append(message)
 
         used = response.usage.total_tokens if response.usage else 0
-        print(f"📏 [{step}] context: {used} / {CONTEXT_LIMIT} tokens ({used / CONTEXT_LIMIT:.0%})")
+        print(f"[step {step}] context: {used} / {CONTEXT_LIMIT} tokens ({used / CONTEXT_LIMIT:.0%})")
 
         if not message.tool_calls:
             print(message.content)
@@ -287,7 +300,7 @@ def run(user_request: str) -> None:
             except json.JSONDecodeError as e:
                 result = f"Error: invalid JSON arguments ({e}). Try again with valid JSON."
             else:
-                print(f"🔧 {name}({arguments})")
+                print(f"[tool] {name}({arguments})")
                 call = (name, json.dumps(arguments, sort_keys=True))
                 if len(history) >= 3 and all(h == call for h in history[-3:]):
                     result = "Error: repetition detected. Change your approach."
@@ -301,7 +314,7 @@ def run(user_request: str) -> None:
             used += len(result) // 4  # estimate (~4 characters per token)
 
         if used > COMPACT_THRESHOLD * CONTEXT_LIMIT:
-            messages = compact(messages, user_request)
+            messages = compact(messages, user_request, system_prompt)
 
     print(f"\nLimit of {MAX_STEPS} turns reached, task aborted.")
 

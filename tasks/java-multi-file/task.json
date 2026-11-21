@@ -1,0 +1,7 @@
+{
+  "prompt": "Main.java checks the banking rules and must print OK. Fix the code so it does. Compile with javac *.java and run with java Main. Do not modify Main.java.",
+  "check": "javac *.java && [ \"$(java Main)\" = \"OK\" ]",
+  "protected": [
+    "Main.java"
+  ]
+}

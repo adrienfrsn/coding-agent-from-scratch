@@ -8,7 +8,7 @@ import time
 from openai import OpenAI
 
 client = OpenAI(base_url=os.environ.get("OLLAMA_URL", "http://localhost:11434/v1"), api_key="ollama")
-MODEL = "qwen2.5:7b"
+MODEL = os.environ.get("MODEL", "qwen-coder")
 
 SYSTEM_PROMPT = (
     "You are an autonomous coding agent. "
@@ -33,6 +33,7 @@ def load_system_prompt() -> str:
         "Project instructions (from AGENTS.md):\n"
         f"{agents_md.read_text()}"
     )
+
 
 CONTEXT_LIMIT = int(os.environ.get("CONTEXT_LIMIT", 32768))
 COMPACT_THRESHOLD = 0.75
@@ -175,11 +176,13 @@ def read_file(path: str, offset: int = 1) -> str:
 
 def write_file(path, content) -> str:
     try:
-        safe_path(path).parent.mkdir(parents=True, exist_ok=True)
-        safe_path(path).write_text(content)
+        target = safe_path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
         return "OK"
     except Exception as e:
         return f"Error: {e}"
+
 
 def run_command(command: str) -> str:
     print(f"\n$ {command}")
@@ -213,17 +216,18 @@ def list_files(path: str) -> str:
     except Exception as e:
         return f"Error: {e}"
 
-    
+
 def edit_file(path: str, old: str, new: str) -> str:
     try:
-        content = safe_path(path).read_text()
+        target = safe_path(path)
+        content = target.read_text()
         if old not in content:
             return f"Error: the string '{old}' was not found in the file"
         elif content.count(old) > 1:
             return f"Error: the string '{old}' appears several times in the file"
         else:
             content = content.replace(old, new)
-            safe_path(path).write_text(content)
+            target.write_text(content)
             return "OK"
     except Exception as e:
         return f"Error: {e}"

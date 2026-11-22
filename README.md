@@ -63,7 +63,8 @@ Security is built in several layers, each covering what the others do not:
 
 - **Command confirmation**: every shell command is displayed and must be explicitly approved. Refusal is the default behavior.
 - **Timeout**: a command that runs longer than 60 seconds is interrupted.
-- **Truncated output**: only the end of a command's output is returned to the model, so as not to saturate its context (see below).
+- **Working directory sandbox**: file tools resolve every path and refuse anything outside the directory the agent was started in.
+- **Truncated output**: only the end of a command's output is returned to the model, so as not to saturate its context (see [Context management](#context-management)).
 - **Errors returned to the model**: a tool that fails does not crash the agent, it returns the error so the model can correct itself.
 
 ### A concrete example
@@ -72,8 +73,8 @@ Asking the agent to read `~/.zshrc` gives this:
 
 ```
 > read the content of the file ~/.zshrc
-🔧 read_file({'path': '~/.zshrc'})
-🔧 run_command({'command': 'cat ~/.zshrc'})
+[tool] read_file({'path': '~/.zshrc'})
+[tool] run_command({'command': 'cat ~/.zshrc'})
 
 $ cat ~/.zshrc
 Run? [y/N]
@@ -106,7 +107,7 @@ Then create the model variant and the Python environment:
 ollama create qwen-coder -f Modelfile
 python -m venv .venv
 source .venv/bin/activate
-pip install openai
+pip install -r requirements.txt
 ```
 
 The context window is essential: with Ollama's default value, the tool definitions and a few file reads are enough to exceed it, and the beginning of the conversation is silently truncated.
@@ -121,8 +122,7 @@ python agent.py
 > create a Java hello world, compile it and run it
 ```
 
-The agent uses Ollama's OpenAI-compatible API, so it also works with LM Studio or any other compatible server, by simply changing the URL and the model name.
-
+The agent uses Ollama's OpenAI-compatible API, so it also works with LM Studio or any other compatible server: set `OLLAMA_URL` (default `http://localhost:11434/v1`) and `MODEL` (default `qwen-coder`).
 
 ## Evaluation
 
@@ -146,12 +146,8 @@ Four advanced tasks ship an `AGENTS.md` describing the project (layout, how to r
 ```bash
 docker run --rm -it -v "$PWD":/app -w /app \
   -e OLLAMA_URL=http://host.docker.internal:11434/v1 python:3.12 bash
-pip install openai pytest
+pip install -r requirements.txt
 python eval.py
 ```
 
 The Java tasks require `javac` in the container (`apt-get install -y default-jdk-headless`).
-
-Reference score:
-- Qwen 3.8 27b: 90%
-- Qwen 2.5 7b: 15%
